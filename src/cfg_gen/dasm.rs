@@ -268,13 +268,13 @@ pub const OPCODE_JUMPMAP: [Option<&'static str>; 256] = [
 ];
 
 #[derive(Clone, Default)]
-pub struct InstructionBlock<'a> {
+pub struct InstructionBlock {
     pub start_pc: u16,
     pub end_pc: u16,
     // TODO: Get rid of vectors and work with slices
-    pub ops: Vec<Instruction<'a>>, // Vec<pc, op_code, push_val
+    pub ops: Vec<Instruction>, // Vec<pc, op_code, push_val
     pub indirect_jump: Option<u16>,
-    pub push_vals: Vec<(Vec<&'a u8>, Option<BTreeSet<u16>>)>,
+    pub push_vals: Vec<(Vec<u8>, Option<BTreeSet<u16>>)>,
     pub stack_info: StackInfo,
 }
 
@@ -395,22 +395,21 @@ impl Debug for StackElement {
 
 pub type OpWithPos = (u8, u8);
 
-impl<'a> Debug for InstructionBlock<'a> {
+impl Debug for InstructionBlock {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut s = String::new();
 
         // start the string by doing a typical "pc14: PUSH1 0x16"
         for instruction in &self.ops {
-            let op_str = OPCODE_JUMPMAP[*instruction.op as usize].unwrap_or("INVALID");
+            let op_str = OPCODE_JUMPMAP[instruction.op as usize].unwrap_or("INVALID");
             let formatted_pc = format_pc(instruction.pc);
             match instruction.data.clone() {
                 Some(val) => {
                     // define how many bytes do we need to display
                     //
-                    let vec_of_u8: Vec<u8> = val.iter().map(|&&x| x).collect();
                     s.push_str(&format!(
                         "[{formatted_pc}] {op_str} {hex_val}\n",
-                        hex_val = hex::encode(vec_of_u8)
+                        hex_val = hex::encode(val)
                     ))
                 }
                 None => s.push_str(&format!("[{formatted_pc}] {op_str}\n")),
@@ -428,7 +427,7 @@ impl<'a> Debug for InstructionBlock<'a> {
     }
 }
 
-impl<'a> InstructionBlock<'a> {
+impl InstructionBlock {
     pub fn new(start_pc: u16) -> Self {
         Self {
             start_pc,
@@ -440,7 +439,7 @@ impl<'a> InstructionBlock<'a> {
         }
     }
 
-    pub fn add_instruction(&mut self, instruction: Instruction<'a>) {
+    pub fn add_instruction(&mut self, instruction: Instruction) {
         self.ops.push(instruction);
         // if let Some(push_val) = instruction.data {
         // self.push_vals.push((push_val, None));
@@ -451,7 +450,7 @@ impl<'a> InstructionBlock<'a> {
         self.indirect_jump = Some(pc);
     }
 
-    pub fn add_push_val_stack_loc_on_exit(&mut self, val: &mut Vec<&u8>, pos: u16) {
+    pub fn add_push_val_stack_loc_on_exit(&mut self, val: &mut Vec<u8>, pos: u16) {
         for (push_val, stack_pos) in self.push_vals.iter_mut() {
             if push_val == val {
                 // insert blank set if none, then insert pos
@@ -471,7 +470,7 @@ impl<'a> InstructionBlock<'a> {
     pub fn end_block(
         &mut self,
         end_pc: u16,
-        blocks: &mut Vec<InstructionBlock<'a>>,
+        blocks: &mut Vec<InstructionBlock>,
     ) -> InstructionBlock {
         self.end_pc = end_pc;
         blocks.push(self.clone());
@@ -480,7 +479,7 @@ impl<'a> InstructionBlock<'a> {
 
     pub fn node_color(&self) -> Option<String> {
         for instruction in &self.ops {
-            let op_str = OPCODE_JUMPMAP[*instruction.op as usize].unwrap_or("INVALID");
+            let op_str = OPCODE_JUMPMAP[instruction.op as usize].unwrap_or("INVALID");
             if ["REVERT", "INVALID"].contains(&op_str) {
                 return Some("red".to_string());
             } else if ["RETURN", "STOP"].contains(&op_str) {
@@ -527,7 +526,7 @@ impl<'a> InstructionBlock<'a> {
         // iterate over the ops
         for instruction in &self.ops {
             let pc = instruction.pc;
-            let op = *instruction.op;
+            let op = instruction.op;
             let opcode_info = opcode(op);
             let op_inputs = opcode_info.inputs as u8;
             let op_outputs = opcode_info.outputs as u8;
@@ -1048,7 +1047,7 @@ impl<'a> InstructionBlock<'a> {
                             let val = self
                                 .ops
                                 .iter()
-                                .find(|instruction| &instruction.pc == pc && instruction.op == op)
+                                .find(|instruction| &instruction.pc == pc && &instruction.op == op)
                                 .map(|instruction| {
                                     instruction
                                         .data
@@ -1083,11 +1082,9 @@ impl<'a> InstructionBlock<'a> {
                             let val = self
                                 .ops
                                 .iter()
-                                .find(|instruction| &instruction.pc == pc && instruction.op == op)
-                                .map(|instruction| {
-                                    instruction
-                                        .data
-                                        .clone()
+                                .find(|instruction| &instruction.pc == pc && &instruction.op == op)
+                                .map(|Instruction { pc, op, data }| {
+                                    data.clone()
                                         .expect("no push val found for push statement {pc} {op}")
                                 })
                                 .expect("no push statement found for push statement {pc} {op}");
@@ -1341,7 +1338,7 @@ impl<'a> InstructionBlock<'a> {
                     let mut val = self
                         .ops
                         .iter()
-                        .find(|instruction| &instruction.pc == pc && instruction.op == op)
+                        .find(|instruction| &instruction.pc == pc && &instruction.op == op)
                         .map(|instruction| {
                             instruction
                                 .data
@@ -1521,15 +1518,15 @@ impl<'a> InstructionBlock<'a> {
 }
 
 #[derive(Clone, Debug)]
-pub struct Instruction<'a> {
+pub struct Instruction {
     pub pc: u16,
-    pub op: &'a u8,
-    pub data: Option<Vec<&'a u8>>,
+    pub op: u8,
+    pub data: Option<Vec<u8>>,
 }
 
-trait BytecodeToInstructions<'a, T>
+trait BytecodeToInstructions<T>
 where
-    T: Iterator<Item = Instruction<'a>>,
+    T: Iterator<Item = Instruction>,
 {
     fn instructions(&self) -> T;
 }
@@ -1540,29 +1537,29 @@ where
 //     }
 // }
 //
-struct BytecodeToInstructionsIter<'a, T>
+struct BytecodeToInstructionsIter<T>
 where
-    T: Iterator<Item = &'a u8>,
+    T: Iterator<Item = u8>,
 {
     iter: T,
     current_pos: usize,
 }
 
-impl<'a, T> Iterator for BytecodeToInstructionsIter<'a, T>
+impl<T> Iterator for BytecodeToInstructionsIter<T>
 where
-    T: Iterator<Item = &'a u8>,
+    T: Iterator<Item = u8>,
 {
-    type Item = Instruction<'a>;
+    type Item = Instruction;
     fn next(&mut self) -> Option<Self::Item> {
         if let Some(op) = self.iter.next() {
-            let op_str = OPCODE_JUMPMAP[*op as usize];
+            let op_str = OPCODE_JUMPMAP[op as usize];
 
             match op_str {
                 Some(name) => {
                     // TODO: Improve this
                     if name.contains("PUSH") {
                         let byte_count_to_push = name.replace("PUSH", "").parse().unwrap();
-                        let pushed_bytes: Vec<&u8> =
+                        let pushed_bytes: Vec<u8> =
                             self.iter.by_ref().take(byte_count_to_push).collect();
                         let instruction = Some(Instruction {
                             pc: self.current_pos as u16,
@@ -1592,9 +1589,9 @@ where
     }
 }
 
-fn get_bytecode_iterator<'a, T>(bytecode: T) -> BytecodeToInstructionsIter<'a, T>
+fn get_bytecode_iterator<'a, T>(bytecode: T) -> BytecodeToInstructionsIter<T>
 where
-    T: Iterator<Item = &'a u8>,
+    T: Iterator<Item = u8>,
 {
     BytecodeToInstructionsIter {
         iter: bytecode,
@@ -1602,17 +1599,17 @@ where
     }
 }
 
-pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
+pub fn disassemble(bytecode: Vec<u8>) -> Vec<InstructionBlock> {
     let mut blocks: Vec<InstructionBlock> = Vec::new();
     // Iterate over the bytecode, disassembling each instruction.
     let mut block = InstructionBlock::new(0);
     let mut push_flag: i32 = 0;
 
-    let bytecode_iter = get_bytecode_iterator(bytecode.iter());
+    let bytecode_iter = get_bytecode_iterator(bytecode.into_iter());
     let mut instruction_pc = 0;
 
     for instruction in bytecode_iter {
-        let op_str = OPCODE_JUMPMAP[*instruction.op as usize];
+        let op_str = OPCODE_JUMPMAP[instruction.op as usize];
         instruction_pc = instruction.pc;
         match op_str {
             Some(name) => {
@@ -1632,7 +1629,7 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
                         block.add_indirect_jump(instruction_pc);
                     }
                     block.end_block(instruction_pc, &mut blocks);
-                } else if BLOCK_ENDERS_U8.contains(instruction.op) {
+                } else if BLOCK_ENDERS_U8.contains(&instruction.op) {
                     block.add_instruction(instruction);
                     block.end_block(instruction_pc, &mut blocks);
                 } else {

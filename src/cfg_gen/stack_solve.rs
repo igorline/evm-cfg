@@ -71,7 +71,7 @@ impl EdgeStack {
             FnvBuildHasher,
         >,
         stack_entry_default_adjustment: i16,
-        push_vals: &[(Vec<&u8>, Option<BTreeSet<u16>>)],
+        push_vals: &[(Vec<u8>, Option<BTreeSet<u16>>)],
         set_all_valid_jumpdests: &HashSet<u16, FnvBuildHasher>,
     ) -> Self {
         let mut stack_pos = self.stack_pos;
@@ -219,7 +219,7 @@ pub fn symbolic_cycle(
 
         // check if last opcode is a jump in this block (JUMPIs dont have indirect jumps??? according to EtherSolve in practice)
         let instruction = current_block.ops.last().unwrap();
-        if *instruction.op == 0x56 {
+        if instruction.op == 0x56 {
             // find op usage of jump and iterate over the values it uses
             let jump_usage = current_block
                 .stack_info

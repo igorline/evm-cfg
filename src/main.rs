@@ -129,7 +129,7 @@ fn main() {
     }
 
     // convert bytecode to instruction blocks
-    let mut instruction_blocks = dasm::disassemble(&bytecode_vec);
+    let mut instruction_blocks = dasm::disassemble(bytecode_vec.clone());
 
     // analyze each instruction block statically to determine stack usage agnostic to entry values
     for block in &mut instruction_blocks {
