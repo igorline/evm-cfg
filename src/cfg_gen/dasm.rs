@@ -1084,8 +1084,10 @@ impl<'a> InstructionBlock<'a> {
                                 .ops
                                 .iter()
                                 .find(|instruction| &instruction.pc == pc && instruction.op == op)
-                                .map(|Instruction { pc, op, data }| {
-                                    data.clone()
+                                .map(|instruction| {
+                                    instruction
+                                        .data
+                                        .clone()
                                         .expect("no push val found for push statement {pc} {op}")
                                 })
                                 .expect("no push statement found for push statement {pc} {op}");
@@ -1568,7 +1570,7 @@ where
                             data: Some(pushed_bytes),
                         });
 
-                        self.current_pos += 1;
+                        self.current_pos += 1 + byte_count_to_push;
                         return instruction;
                     }
                     let instruction = Some(Instruction {
@@ -1600,18 +1602,11 @@ where
     }
 }
 
-pub fn disassemble<'a>(bytecode: &'a [u8]) -> Vec<InstructionBlock> {
+pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
     let mut blocks: Vec<InstructionBlock> = Vec::new();
     // Iterate over the bytecode, disassembling each instruction.
     let mut block = InstructionBlock::new(0);
     let mut push_flag: i32 = 0;
-
-    let mut instructions = vec![];
-    for pc in get_bytecode_iterator(bytecode.iter()) {
-        instructions.push(pc);
-    }
-
-    println!("{instructions:?}");
 
     let bytecode_iter = get_bytecode_iterator(bytecode.iter());
     let mut instruction_pc = 0;
@@ -1637,7 +1632,7 @@ pub fn disassemble<'a>(bytecode: &'a [u8]) -> Vec<InstructionBlock> {
                         block.add_indirect_jump(instruction_pc);
                     }
                     block.end_block(instruction_pc, &mut blocks);
-                } else if BLOCK_ENDERS_U8.contains(&instruction.op) {
+                } else if BLOCK_ENDERS_U8.contains(instruction.op) {
                     block.add_instruction(instruction);
                     block.end_block(instruction_pc, &mut blocks);
                 } else {

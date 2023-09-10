@@ -206,11 +206,7 @@ impl<'main> CFGRunner<'main> {
             if val
                 .ops
                 .iter()
-                .map(|instruction| {
-                    println!("{}", instruction.pc);
-                    println!("{pc}");
-                    instruction.pc == pc
-                })
+                .map(|instruction| instruction.pc == pc)
                 .any(|x| x)
             {
                 return (val.start_pc, val.end_pc);
