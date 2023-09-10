@@ -71,7 +71,7 @@ impl EdgeStack {
             FnvBuildHasher,
         >,
         stack_entry_default_adjustment: i16,
-        push_vals: &[(Vec<u8>, Option<BTreeSet<u16>>)],
+        push_vals: &[(Vec<&u8>, Option<BTreeSet<u16>>)],
         set_all_valid_jumpdests: &HashSet<u16, FnvBuildHasher>,
     ) -> Self {
         let mut stack_pos = self.stack_pos;
@@ -218,12 +218,12 @@ pub fn symbolic_cycle(
         }
 
         // check if last opcode is a jump in this block (JUMPIs dont have indirect jumps??? according to EtherSolve in practice)
-        let (last_pc, last_op, _push_val) = current_block.ops.last().unwrap();
-        if *last_op == 0x56 {
+        let instruction = current_block.ops.last().unwrap();
+        if *instruction.op == 0x56 {
             // find op usage of jump and iterate over the values it uses
             let jump_usage = current_block
                 .stack_info
-                .get_entry_stack_usage_by_pc(*last_pc);
+                .get_entry_stack_usage_by_pc(instruction.pc);
             if jump_usage.is_empty() {
                 // this is a jump to a value generated in the block.
                 // This could be symbolically created within the block (sload), or a push (right above or prior in the block)
@@ -261,7 +261,7 @@ pub fn symbolic_cycle(
                     // This is a symbolic jump created within the block
                     println!(
                         "Symbolic jump to location created within block at jump pc: {}",
-                        format_pc(*last_pc)
+                        format_pc(instruction.pc)
                     );
                     if label_symbolic_jumps {
                         println!("\t- Labeling symbolic jumps is enabled, output may be unbearable. change variable in main.rs if youd like, skipping this jump");
@@ -347,7 +347,7 @@ pub fn symbolic_cycle(
                 } else {
                     // we do not have a tracked push value for this entry, this is symbolic
                     // This is a symbolic jump from an entry position not tracked
-                    println!("Stack Entry not tracked for this jump. Symbolic jump to stack loc at jump pc: {}", format_pc(*last_pc));
+                    println!("Stack Entry not tracked for this jump. Symbolic jump to stack loc at jump pc: {}", format_pc(instruction.pc));
                     if label_symbolic_jumps {
                         println!("\t- Labeling symbolic jumps is enabled, output may be unbearable. change variable in main.rs if youd like, skipping this jump");
                         // add all jumpdests as possible next nodes as long as the current stack size is >= the jumpdest's required stack size

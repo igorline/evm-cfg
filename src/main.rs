@@ -144,7 +144,7 @@ fn main() {
 
     // create initial cfg using only nodes
     let mut cfg_runner =
-        cfg_gen::cfg_graph::CFGRunner::new(bytecode_vec, &mut map_to_instructionblocks);
+        cfg_gen::cfg_graph::CFGRunner::new(bytecode_vec.clone(), &mut map_to_instructionblocks);
     if output_handler.show_bare_nodes {
         // write out the cfg with bare nodes only
         let mut file = std::fs::File::create("cfg_nodes_only.dot").expect("bad fs open");
