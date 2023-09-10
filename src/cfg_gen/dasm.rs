@@ -1,10 +1,12 @@
 use crate::cfg_gen::*;
 use fnv::FnvBuildHasher;
-use itertools::Itertools;
+use itertools::{Iterate, Itertools};
 use std::{
+    array::IntoIter,
     collections::{HashMap, HashSet, VecDeque},
     fmt::Debug,
     hash::Hash,
+    slice::Iter,
 };
 
 // TODO: Implement enum
@@ -1519,28 +1521,110 @@ impl InstructionBlock {
     }
 }
 
+#[derive(Debug)]
+struct Instruction<'a> {
+    pc: u16,
+    op: &'a u8,
+    data: Option<Vec<&'a u8>>,
+}
+
+trait BytecodeToInstructions<'a, T>
+where
+    T: Iterator<Item = Instruction<'a>>,
+{
+    fn instructions(&self) -> T;
+}
+
+// impl<'a, T> BytecodeToInstructions<'a, T> for &'a [u8] where T: Iterator<Item = Instruction<'a>> {
+//     fn instructions(&self) -> {
+//         self.iter()
+//     }
+// }
+//
+struct BytecodeToInstructionsIter<'a, T>
+where
+    T: Iterator<Item = &'a u8>,
+{
+    iter: T,
+    current_pos: usize,
+}
+
+impl<'a, T> Iterator for BytecodeToInstructionsIter<'a, T>
+where
+    T: Iterator<Item = &'a u8>,
+{
+    type Item = Instruction<'a>;
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(op) = self.iter.next() {
+            let op_str = OPCODE_JUMPMAP[*op as usize];
+
+            match op_str {
+                Some(name) => {
+                    // TODO: Improve this
+                    if name.contains("PUSH") {
+                        let byte_count_to_push = name.replace("PUSH", "").parse().unwrap();
+                        let pushed_bytes: Vec<&u8> =
+                            self.iter.by_ref().take(byte_count_to_push).collect();
+                        let instruction = Some(Instruction {
+                            pc: self.current_pos as u16,
+                            op,
+                            data: Some(pushed_bytes),
+                        });
+
+                        self.current_pos += 1;
+                        return instruction;
+                    }
+                    let instruction = Some(Instruction {
+                        pc: self.current_pos as u16,
+                        op,
+                        data: None,
+                    });
+                    self.current_pos += 1;
+                    return instruction;
+                }
+                None => {
+                    // Error
+                    self.current_pos += 1;
+                    return self.next();
+                }
+            }
+        }
+        None
+    }
+}
+
+fn get_bytecode_iterator<'a, T>(bytecode: T) -> BytecodeToInstructionsIter<'a, T>
+where
+    T: Iterator<Item = &'a u8>,
+{
+    BytecodeToInstructionsIter {
+        iter: bytecode,
+        current_pos: 0,
+    }
+}
+
 pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
     let mut pc: u16 = 0;
     let mut blocks: Vec<InstructionBlock> = Vec::new();
     // Iterate over the bytecode, disassembling each instruction.
     let mut block = InstructionBlock::new(0);
     let mut push_flag: i32 = 0;
-    // TODO: Implement iterator
-    while (pc as usize) < bytecode.len() {
-        let op = bytecode[pc as usize];
-        let op_str = OPCODE_JUMPMAP[op as usize];
+
+    let mut instructions = vec![];
+    for pc in get_bytecode_iterator(bytecode.iter()) {
+        instructions.push(pc);
+    }
+
+    println!("{instructions:?}");
+
+    let bytecode_iter = get_bytecode_iterator(bytecode.iter());
+
+    for instr in bytecode_iter {
+        let op_str = OPCODE_JUMPMAP[*instr.op as usize];
         match op_str {
             Some(name) => {
                 if name.contains("PUSH") {
-                    let byte_count_to_push: u16 = name.replace("PUSH", "").parse().unwrap();
-                    let pushed_bytes = bytecode
-                        .get(pc as usize + 1..pc as usize + 1 + byte_count_to_push as usize)
-                        .unwrap_or(&[0x45])
-                        .to_vec();
-                    // OoB, this can actually happen in the metadata often but is useless
-                    // let pushed_bytes = 0x45; // what actually happens in the evm is the remaining OoB bytes are treated as zeros and appended
                     block.add_instruction(pc, op, Some(pushed_bytes));
-                    pc += byte_count_to_push;
                     push_flag = 2;
                 } else if name.contains("JUMPDEST") {
                     if !block.ops.is_empty() {
