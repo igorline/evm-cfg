@@ -128,6 +128,9 @@ fn main() {
 
     // convert bytecode to instruction blocks
     let mut instruction_blocks = dasm::disassemble(&bytecode_vec);
+    if output_handler.show_timings {
+        println!("disassembly took: {:?}", disassembly_time.elapsed());
+    }
 
     // analyze each instruction block statically to determine stack usage agnostic to entry values
     for block in &mut instruction_blocks {
@@ -141,8 +144,10 @@ fn main() {
         .collect();
 
     // create initial cfg using only nodes
-    let mut cfg_runner =
-        evm_cfg::cfg_gen::cfg_graph::CFGRunner::new(bytecode_vec, &mut map_to_instructionblocks);
+    let mut cfg_runner = evm_cfg::cfg_gen::cfg_graph::CFGRunner::new(
+        bytecode_vec.clone(),
+        &mut map_to_instructionblocks,
+    );
     if output_handler.show_bare_nodes {
         // write out the cfg with bare nodes only
         let mut file = std::fs::File::create("cfg_nodes_only.dot").expect("bad fs open");
@@ -154,9 +159,6 @@ fn main() {
     cfg_runner.form_basic_connections();
     // trim instruction blocks from graph that have no incoming edges and do not lead the block with a jumpdest
     cfg_runner.remove_unreachable_instruction_blocks();
-    if output_handler.show_timings {
-        println!("disassembly took: {:?}", disassembly_time.elapsed());
-    }
 
     if output_handler.show_basic_connections {
         // write out the cfg with basic connections only

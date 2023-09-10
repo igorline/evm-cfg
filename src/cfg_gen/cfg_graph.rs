@@ -56,13 +56,13 @@ pub struct CFGRunner<'a> {
     pub last_node: Option<(u16, u16)>,
     pub jumpi_edge: Option<Edges>,
     pub bytecode: Vec<u8>,
-    pub map_to_instructionblock: &'a mut BTreeMap<(u16, u16), InstructionBlock>,
+    pub map_to_instructionblock: &'a mut BTreeMap<(u16, u16), InstructionBlock<'a>>,
 }
 
 impl<'main> CFGRunner<'main> {
     pub fn new(
         bytecode: Vec<u8>,
-        map_to_instructionblock: &'main mut BTreeMap<(u16, u16), InstructionBlock>,
+        map_to_instructionblock: &'main mut BTreeMap<(u16, u16), InstructionBlock<'main>>,
     ) -> Self {
         let mut cfg_dag: CFGDag = GraphMap::new();
 
@@ -115,8 +115,8 @@ impl<'main> CFGRunner<'main> {
             let end_pc = instruction_block.end_pc;
             let start_pc = instruction_block.start_pc;
             let last_op = instruction_block.ops.last().unwrap();
-            let _last_op_pc = last_op.0;
-            let last_op_code = last_op.1;
+            let _last_op_pc = last_op.pc;
+            let last_op_code = last_op.op;
 
             let direct_push = &instruction_block.stack_info.push_used_for_jump;
             let direct_push_val = direct_push.as_ref().copied();
@@ -187,7 +187,7 @@ impl<'main> CFGRunner<'main> {
                 .edges_directed((start_pc, end_pc), Direction::Incoming);
             if incoming_edges.count() == 0 {
                 // This node has no incoming edges, so it is unreachable
-                if instruction_block.ops[0].1 != 0x5b && start_pc != 0 {
+                if instruction_block.ops[0].op != 0x5b && start_pc != 0 {
                     // This node does not begin with a jumpdest, so it is unreachable
                     to_remove.push((start_pc, end_pc));
                 }
@@ -206,7 +206,7 @@ impl<'main> CFGRunner<'main> {
             if val
                 .ops
                 .iter()
-                .map(|(instruction_pc, _op, _push_val)| *instruction_pc == pc)
+                .map(|instruction| instruction.pc == pc)
                 .any(|x| x)
             {
                 return (val.start_pc, val.end_pc);
