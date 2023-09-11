@@ -18,3 +18,8 @@ itertools = "0.10"
 fnv = "1.0.7" # fast hashing for < 64 bytes. https://cglab.ca/~abeinges/blah/hash-rs/
 open = "5.0.0"
 hex = { package = "const-hex", version = "1.6", features = ["hex"] }
+criterion = "0.5.1"
+
+[[bench]]
+name = "disassemble"
+harness = false

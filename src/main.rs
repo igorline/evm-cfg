@@ -1,5 +1,5 @@
-use crate::cfg_gen::{dasm::InstructionBlock, *};
 use clap::{ArgAction, Parser, ValueHint};
+use evm_cfg::cfg_gen::{dasm::InstructionBlock, *};
 use evm_cfg::OutputHandler;
 use fnv::FnvBuildHasher;
 use revm::Bytecode;
@@ -8,8 +8,6 @@ use std::{
     io::Write,
     process::Command,
 };
-
-pub mod cfg_gen;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -144,7 +142,7 @@ fn main() {
 
     // create initial cfg using only nodes
     let mut cfg_runner =
-        cfg_gen::cfg_graph::CFGRunner::new(bytecode_vec, &mut map_to_instructionblocks);
+        evm_cfg::cfg_gen::cfg_graph::CFGRunner::new(bytecode_vec, &mut map_to_instructionblocks);
     if output_handler.show_bare_nodes {
         // write out the cfg with bare nodes only
         let mut file = std::fs::File::create("cfg_nodes_only.dot").expect("bad fs open");
