@@ -486,12 +486,15 @@ impl<'a> InstructionBlock<'a> {
     }
 
     pub fn add_indirect_jump(&mut self) {
-        self.indirect_jump = Some(self.get_last_pc());
+        self.indirect_jump = Some(self.end_pc);
     }
 
     pub fn get_last_pc(&self) -> u16 {
         let last_operation = self.ops.last().expect("should have last operation");
-        let last_operation_data_len = last_operation.data.unwrap_or(&[]).len();
+        let last_operation_data_len = match last_operation.data {
+            Some(slice) => slice.len(),
+            _ => 0,
+        };
 
         last_operation.pc + last_operation_data_len as u16
     }
@@ -517,7 +520,7 @@ impl<'a> InstructionBlock<'a> {
         let end_pc = self.get_last_pc();
         self.end_pc = end_pc;
         blocks.push(self.clone());
-        InstructionBlock::new(end_pc + 1)
+        InstructionBlock::new(self.end_pc + 1)
     }
 
     pub fn node_color(&self) -> Option<String> {
@@ -1610,9 +1613,7 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
     let mut block = InstructionBlock::new(0);
     let mut push_flag: i32 = 0;
 
-    let instructions: Vec<Instruction> = InstructionsIterator::new(bytecode).collect();
-
-    for instruction in instructions {
+    for instruction in InstructionsIterator::new(bytecode) {
         let op_str = OPCODE_JUMPMAP[instruction.op as usize];
         match op_str {
             Some(name) => {
