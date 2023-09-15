@@ -308,6 +308,7 @@ fn get_push_bytes(op: u8) -> usize {
 #[derive(Clone, Default)]
 pub struct InstructionBlock<'a> {
     pub start_pc: u16,
+    // TODO: end location??
     pub end_pc: u16,
     // TODO: Get rid of vectors and work with slices
     pub ops: Vec<Instruction<'a>>, // Vec<pc, op_code, push_val
@@ -484,8 +485,15 @@ impl<'a> InstructionBlock<'a> {
         self.ops.push(instruction);
     }
 
-    pub fn add_indirect_jump(&mut self, pc: u16) {
-        self.indirect_jump = Some(pc);
+    pub fn add_indirect_jump(&mut self) {
+        self.indirect_jump = Some(self.get_last_pc());
+    }
+
+    pub fn get_last_pc(&self) -> u16 {
+        let last_operation = self.ops.last().expect("should have last operation");
+        let last_operation_data_len = last_operation.data.unwrap_or(&[]).len();
+
+        last_operation.pc + last_operation_data_len as u16
     }
 
     pub fn add_push_val_stack_loc_on_exit(&mut self, val: &mut &[u8], pos: u16) {
@@ -505,11 +513,8 @@ impl<'a> InstructionBlock<'a> {
         }
     }
 
-    pub fn end_block(
-        &mut self,
-        end_pc: u16,
-        blocks: &mut Vec<InstructionBlock<'a>>,
-    ) -> InstructionBlock {
+    pub fn end_block(&mut self, blocks: &mut Vec<InstructionBlock<'a>>) -> InstructionBlock {
+        let end_pc = self.get_last_pc();
         self.end_pc = end_pc;
         blocks.push(self.clone());
         InstructionBlock::new(end_pc + 1)
@@ -1605,34 +1610,27 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
     let mut block = InstructionBlock::new(0);
     let mut push_flag: i32 = 0;
 
-    let mut instruction_pc = 0;
-
     let instructions: Vec<Instruction> = InstructionsIterator::new(bytecode).collect();
 
     for instruction in instructions {
         let op_str = OPCODE_JUMPMAP[instruction.op as usize];
-        instruction_pc = instruction.pc + instruction.data.map_or(0, |data| data.len()) as u16 + 1;
         match op_str {
             Some(name) => {
                 if name.contains("PUSH") {
                     block.add_instruction(instruction);
                     push_flag = 2;
                 } else if name.contains("JUMPDEST") {
-                    if !block.ops.is_empty() {
-                        // this is only used if the metadata doesnt end with a block ender
-                        block.end_block(instruction.pc - 1, &mut blocks); // we are starting a new block, so end the old one with the previous pc
-                    }
-                    block = InstructionBlock::new(instruction.pc);
+                    block.end_block(&mut blocks); // we are starting a new block, so end the old one with the previous pc
                     block.add_instruction(instruction);
                 } else if name.contains("JUMP") {
                     block.add_instruction(instruction);
                     if push_flag != 1 {
-                        block.add_indirect_jump(instruction_pc);
+                        block.add_indirect_jump();
                     }
-                    block.end_block(instruction_pc, &mut blocks);
+                    block.end_block(&mut blocks);
                 } else if BLOCK_ENDERS_U8.contains(&instruction.op) {
                     block.add_instruction(instruction);
-                    block.end_block(instruction_pc, &mut blocks);
+                    block.end_block(&mut blocks);
                 } else {
                     block.add_instruction(instruction);
                 }
@@ -1641,7 +1639,7 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
                 //invalid
                 //end block, but idk, not sure how to handle this. another new block may not start
                 block.add_instruction(instruction);
-                block.end_block(instruction_pc, &mut blocks);
+                block.end_block(&mut blocks);
             }
         }
         push_flag -= 1;
@@ -1649,7 +1647,7 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
 
     if !block.ops.is_empty() {
         // this is only used if the metadata doesnt end with a block ender
-        block.end_block(instruction_pc, &mut blocks);
+        block.end_block(&mut blocks);
     }
     blocks
 }
