@@ -139,8 +139,8 @@ fn main() {
 
     // QoL: map cfg-nodes to instruction blocks for easy lookup rather than stuffing graph with instruction block info as node weights
     let mut map_to_instructionblocks: BTreeMap<(u16, u16), InstructionBlock> = instruction_blocks
-        .iter()
-        .map(|block| ((block.start_pc, block.end_pc), block.clone()))
+        .into_iter()
+        .map(|block| ((block.start_pc, block.end_pc), block))
         .collect();
 
     // create initial cfg using only nodes

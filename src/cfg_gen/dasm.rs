@@ -305,7 +305,7 @@ fn get_push_bytes(op: u8) -> usize {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Default)]
 pub struct InstructionBlock<'a> {
     pub start_pc: u16,
     // TODO: end location??
@@ -490,7 +490,11 @@ impl<'a> InstructionBlock<'a> {
     }
 
     pub fn get_last_pc(&self) -> u16 {
-        let last_operation = self.ops.last().expect("should have last operation");
+        let last_operation_opt = self.ops.last();
+        if last_operation_opt.is_none() {
+            return 0;
+        }
+        let last_operation = last_operation_opt.unwrap();
         let last_operation_data_len = match last_operation.data {
             Some(slice) => slice.len(),
             _ => 0,
@@ -516,11 +520,9 @@ impl<'a> InstructionBlock<'a> {
         }
     }
 
-    pub fn end_block(&mut self, blocks: &mut Vec<InstructionBlock<'a>>) -> InstructionBlock {
+    pub fn end_block(&mut self) {
         let end_pc = self.get_last_pc();
         self.end_pc = end_pc;
-        blocks.push(self.clone());
-        InstructionBlock::new(self.end_pc + 1)
     }
 
     pub fn node_color(&self) -> Option<String> {
@@ -1621,17 +1623,27 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
                     block.add_instruction(instruction);
                     push_flag = 2;
                 } else if name.contains("JUMPDEST") {
-                    block.end_block(&mut blocks); // we are starting a new block, so end the old one with the previous pc
+                    if !block.ops.is_empty() {
+                        block.end_block(); // we are starting a new block, so end the old one with the previous pc
+                        blocks.push(block);
+                        block = InstructionBlock::new(instruction.pc + 1);
+                    }
                     block.add_instruction(instruction);
                 } else if name.contains("JUMP") {
+                    let pc = instruction.pc;
                     block.add_instruction(instruction);
                     if push_flag != 1 {
                         block.add_indirect_jump();
                     }
-                    block.end_block(&mut blocks);
+                    block.end_block();
+                    blocks.push(block);
+                    block = InstructionBlock::new(pc + 1);
                 } else if BLOCK_ENDERS_U8.contains(&instruction.op) {
+                    let pc = instruction.pc;
                     block.add_instruction(instruction);
-                    block.end_block(&mut blocks);
+                    block.end_block();
+                    blocks.push(block);
+                    block = InstructionBlock::new(pc + 1);
                 } else {
                     block.add_instruction(instruction);
                 }
@@ -1639,8 +1651,11 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
             None => {
                 //invalid
                 //end block, but idk, not sure how to handle this. another new block may not start
+                let pc = instruction.pc;
                 block.add_instruction(instruction);
-                block.end_block(&mut blocks);
+                block.end_block();
+                blocks.push(block);
+                block = InstructionBlock::new(pc + 1);
             }
         }
         push_flag -= 1;
@@ -1648,7 +1663,8 @@ pub fn disassemble(bytecode: &[u8]) -> Vec<InstructionBlock> {
 
     if !block.ops.is_empty() {
         // this is only used if the metadata doesnt end with a block ender
-        block.end_block(&mut blocks);
+        block.end_block();
+        blocks.push(block);
     }
     blocks
 }
